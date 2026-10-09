@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791204808598,
+      "tag": "0000_wandering_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791318482964,
+      "tag": "0001_v2_rls_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791347617579,
+      "tag": "0002_goals_wider_values",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791349501779,
+      "tag": "0003_v3_community",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791496262357,
+      "tag": "0004_v4_diet",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/*
+ * Identità visiva di G.YM
+ * Gesso su inchiostro: l'interfaccia è monocromatica, quindi il colore compare solo
+ * dove significa qualcosa — i livelli di forza (grigio, verde, blu, viola, oro).
+ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1114;
+  --surface: #171a1f;
+  --surface-2: #1f232a;
+  --line: #2b3039;
+  --fg: #eef0f3;
+  --muted: #98a0ad;
+  --on-fg: #0f1114;
+  --danger: #f2616a;
+  --lv-0: #59616f;
+  --lv-1: #3fc27f;
+  --lv-2: #5a94ff;
+  --lv-3: #ab74ff;
+  --lv-4: #f7ac2b;
+  --body-base: #232830;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1f2f4;
+  --surface: #ffffff;
+  --surface-2: #e9ebee;
+  --line: #d9dce2;
+  --fg: #14171c;
+  --muted: #5f6775;
+  --on-fg: #f6f7f9;
+  --danger: #ab1f28;
+  --lv-0: #a5acb8;
+  --lv-1: #20a665;
+  --lv-2: #2f6feb;
+  --lv-3: #8a4de8;
+  --lv-4: #e08d08;
+  --body-base: #dfe2e7;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --bg: #f1f2f4;
+    --surface: #ffffff;
+    --surface-2: #e9ebee;
+    --line: #d9dce2;
+    --fg: #14171c;
+    --muted: #5f6775;
+    --on-fg: #f6f7f9;
+    --danger: #ab1f28;
+    --lv-0: #a5acb8;
+    --lv-1: #20a665;
+    --lv-2: #2f6feb;
+    --lv-3: #8a4de8;
+    --lv-4: #e08d08;
+    --body-base: #dfe2e7;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-onfg: var(--on-fg);
+  --color-danger: var(--danger);
+  --color-lv0: var(--lv-0);
+  --color-lv1: var(--lv-1);
+  --color-lv2: var(--lv-2);
+  --color-lv3: var(--lv-3);
+  --color-lv4: var(--lv-4);
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --radius-card: 22px;
+}
+
+/*
+ * IMPORTANTE: in Tailwind 4 gli stili fuori da un @layer vincono SEMPRE sulle classi utility
+ * (`text-onfg`, `font-semibold`, `text-[28px]`...). Per questo tutto ciò che segue sta in un layer:
+ * `base` per i reset (battuti dalle utility, come deve essere), `components` per le classi nostre.
+ */
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.45;
+    min-height: 100dvh;
+    background: var(--bg);
+    overscroll-behavior-y: none;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  .num {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  /* Spazio per la bottom nav su mobile */
+  .page-pad {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 768px) {
+    .page-pad {
+      padding-bottom: 3rem;
+    }
+  }
+
+  /* Un solo momento di animazione: il check della serie completata e le sheet */
+  .pop { animation: pop 0.22s ease-out; }
+  .sheet-in { animation: sheet-in 0.2s ease-out; }
+  .fade-in { animation: fade-in 0.18s ease-out; }
+  .bar-slide { animation: bar-slide 1.1s ease-in-out infinite; }
+  .plate-spin { animation: plate-spin 1.6s linear infinite; }
+
+  /* Colori dei livelli (usati da componenti e mappa del corpo) */
+  .lv-unranked { --lv: var(--lv-0); }
+  .lv-beginner { --lv: var(--lv-1); }
+  .lv-intermediate { --lv: var(--lv-2); }
+  .lv-advanced { --lv: var(--lv-3); }
+  .lv-elite { --lv: var(--lv-4); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.85); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes sheet-in {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bar-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+@keyframes plate-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
