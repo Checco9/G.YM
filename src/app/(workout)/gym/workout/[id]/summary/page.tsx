@@ -4,6 +4,8 @@ import { z } from "zod";
 import { LinkButton } from "@/components/ui/button";
 import { PrList, WorkoutExercises, WorkoutHeading, WorkoutStats } from "@/components/workout-detail";
 import { requireUser } from "@/modules/auth/session";
+import { dayKey } from "@/lib/dates";
+import { weightOn, workoutCalories } from "@/modules/stats/domain/calories";
 import { getPostIdForWorkout } from "@/modules/social/service";
 import { loadHistory } from "@/modules/stats/repository";
 import { buildWorkoutDetail, getWorkoutNotes } from "@/modules/stats/service";
@@ -29,6 +31,8 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
   ]);
   const detail = buildWorkoutDetail(history, id, notes);
   if (!detail) notFound();
+  const weightKg = weightOn(weights, dayKey(new Date(detail.startedAt), user.timezone));
+  const kcal = workoutCalories({ weightKg, durationMin: detail.durationMin, sets: detail.setCount });
   const rewards = buildRewards({ tz: user.timezone, history, weights, challenges }, id);
 
   return (
@@ -64,7 +68,7 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
         <p className="text-sm text-muted">Questo allenamento non dà XP: ne conta uno al giorno e servono almeno 3 serie.</p>
       )}
       <PrList prs={detail.prs} />
-      <WorkoutStats w={detail} />
+      <WorkoutStats w={detail} kcal={kcal} weightMissing={weightKg === null} />
       <WorkoutExercises w={detail} />
       <div className="sticky bottom-4 space-y-2">
         {!postId && (

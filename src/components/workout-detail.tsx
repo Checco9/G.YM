@@ -3,7 +3,7 @@ import type { WorkoutDetail } from "@/modules/stats/service";
 import { Card } from "./ui/card";
 import { Icon } from "./ui/icons";
 
-export function WorkoutStats({ w }: { w: WorkoutDetail }) {
+export function WorkoutStats({ w, kcal = null, weightMissing = false }: { w: WorkoutDetail; kcal?: number | null; weightMissing?: boolean }) {
   const items = [
     { label: "Durata", value: fmtDuration(w.durationMin) },
     { label: "Esercizi", value: String(w.exerciseCount) },
@@ -11,6 +11,7 @@ export function WorkoutStats({ w }: { w: WorkoutDetail }) {
     { label: "Volume totale", value: fmtVolume(w.volume) },
   ];
   return (
+    <div className="space-y-3">
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {items.map((i) => (
         <Card key={i.label} className="p-4">
@@ -18,6 +19,18 @@ export function WorkoutStats({ w }: { w: WorkoutDetail }) {
           <div className="num mt-0.5 text-[32px] font-semibold leading-none">{i.value}</div>
         </Card>
       ))}
+    </div>
+      <Card className="p-4">
+        <div className="text-sm text-muted">Calorie stimate</div>
+        {kcal !== null ? (
+          <>
+            <div className="num mt-0.5 text-[30px] font-semibold leading-none">{fmtNum(kcal, 0)} kcal</div>
+            <p className="mt-1 text-xs text-muted">Stima teorica da peso corporeo, durata e intensità dell'allenamento.</p>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-muted">{weightMissing ? "Registra il tuo peso per vedere la stima delle calorie." : "Non disponibile per questo allenamento."}</p>
+        )}
+      </Card>
     </div>
   );
 }

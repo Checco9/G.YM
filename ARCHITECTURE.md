@@ -25,6 +25,10 @@ src/
     gamification/      XP, livelli account, badge, sfide, classifica (V2)
     social/            feed, post, commenti, reazioni, foto (V3)
     diet/              alimenti, diario, acqua, obiettivi, andamento (V4)
+    notifications/     promemoria, dispositivi, invio push (V4.5)
+    runs/              corsa: cronometro, registrazione manuale (V4.5)
+    daily/             passi e sonno inseriti a mano (V4.5)
+    activity/          calorie stimate di un giorno (V4.5)
     profile/
   config/              muscoli, catalogo esercizi e soglie di forza (dati, non codice)
   components/          UI riutilizzabile; body-map/ è data-driven (regions.ts)
@@ -108,3 +112,12 @@ Scelte volutamente rinviate: notifiche (V5), profili pubblici, messaggi diretti.
 - **Sicurezza**: le quattro nuove tabelle hanno RLS attiva (verificato con un ruolo pubblico: legge 0 righe), ogni query filtra per utente e le date accettate vanno da un anno fa a domani.
 
 Predisposto ma non attivo: lettore di codici a barre (colonna `foods.barcode`).
+
+## V4.5: notifiche, calorie, corsa, passi e sonno
+- **Notifiche push (Web Push + VAPID)**: un service worker (`public/sw.js`) riceve la push e mostra sempre una notifica. Tabelle: `push_subscriptions` (un dispositivo = una riga, endpoint unico), `notification_settings` (interruttore generale e ore di silenzio), `reminders` (tipo, messaggi, orari, giorni, "salta se obiettivo raggiunto"). Ogni utente decide tutto: dispositivi, singoli promemoria, messaggi e orari.
+- **Invio programmato**: `POST /api/cron/notifications` (segreto `CRON_SECRET`, confronto a tempo costante) viene chiamato ogni 5 minuti da GitHub Actions. Per ogni promemoria attivo calcola, nel fuso dell'utente, se un orario è scaduto da meno di 25 minuti (`dueSlot`), rispetta ore di silenzio e interruttore generale, "prenota" l'orario con un `UPDATE ... WHERE last_slot IS DISTINCT FROM` (due controlli sovrapposti non inviano due volte) e compone il messaggio con i dati reali solo se servono. Le iscrizioni scadute (404/410) vengono eliminate.
+- **Sicurezza delle notifiche**: il server invia a un indirizzo fornito dal browser, quindi accetta solo i servizi push noti (FCM, Mozilla, Apple, Windows) via HTTPS, per evitare richieste verso indirizzi arbitrari (SSRF). Limiti di frequenza su iscrizioni e prove.
+- **Calorie stimate** (`stats/domain/calories.ts`): metodo dei MET, calorie = MET x peso x ore. Pesi: MET da 3 a 5,5 in base alla densità di serie al minuto. Corsa: MET dalle equazioni ACSM (cammino e corsa) in base alla velocità. Sono stime teoriche (errore tipico 20-30%) e usano il peso registrato più vicino alla data. Non sono salvate: si calcolano a ogni visualizzazione. Nel diario della dieta il valore arriva da una richiesta separata dopo il caricamento, così non rallenta la pagina.
+- **Corsa** (`runs`): stesso schema degli allenamenti. Il cronometro tiene `elapsed_s` e l'istante di avvio, salva in continuo (bozza locale più invio al server) e sopravvive a una chiusura accidentale; la registrazione manuale crea direttamente una corsa conclusa. La colonna `source` (manuale, cronometro, gps) è predisposta per il GPS. Compaiono nel calendario e nelle statistiche della sezione Corsa (km di settimana e mese, corsa più lunga, miglior passo da 3 km). Non contano ancora per XP, serie di settimane, badge e classifica.
+- **Passi e sonno** (`daily_logs`): una riga per utente e giorno, aggiornamento parziale (un campo assente resta com'è, `null` lo cancella), obiettivi nel profilo, pagina con grafici e medie e riquadro in Home.
+- **Misure** (database locale): Home 61 ms con 9 query, elenco corse 54 ms, sonno e passi 42 ms, notifiche 43 ms, salvataggio del cronometro 20 ms.

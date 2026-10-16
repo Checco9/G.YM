@@ -13,6 +13,8 @@ import { ModeLink } from "@/components/mode-link";
 import { Avatar } from "@/components/post-card";
 import { ProgressBar } from "@/components/ui/progress";
 import { getTodaySummary } from "@/modules/diet/service";
+import { getDaily } from "@/modules/daily/service";
+import { fmtSleep } from "@/lib/format";
 import { dayKey } from "@/lib/dates";
 import { buildGamification, listChallengeRows } from "@/modules/gamification/service";
 import { loadHistory } from "@/modules/stats/repository";
@@ -26,12 +28,13 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const user = await requireUser();
   // tutte le letture partono insieme
-  const [history, weights, active, challengeRows, diet] = await Promise.all([
+  const [history, weights, active, challengeRows, diet, daily] = await Promise.all([
     loadHistory(user.id),
     listWeights(user.id),
     getActiveWorkout(user.id),
     listChallengeRows(user.id),
     getTodaySummary(user.id, dayKey(new Date(), user.timezone)),
+    getDaily(user.id, dayKey(new Date(), user.timezone)),
   ]);
   const [goalsAll] = await Promise.all([listGoals(user.id, history, user.timezone, weights)]);
   const d = buildDashboard(history, user, weights);
@@ -147,6 +150,23 @@ export default async function HomePage() {
             </Card>
           )}
         </div>
+
+        <Link href="/progress/daily" className="md:col-span-6">
+          <Card className="grid grid-cols-2 gap-4 transition-colors hover:bg-surface2">
+            <div>
+              <div className="text-sm text-muted">Passi oggi</div>
+              <div className="num text-[40px] font-semibold leading-none">{daily.steps !== null ? fmtNum(daily.steps, 0) : "—"}</div>
+              <ProgressBar percent={daily.steps !== null ? Math.min(100, Math.round((daily.steps / user.stepsGoal) * 100)) : 0} className="mt-3" />
+              <div className="mt-1 text-xs text-muted">Obiettivo {fmtNum(user.stepsGoal, 0)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted">Sonno</div>
+              <div className="num text-[40px] font-semibold leading-none">{fmtSleep(daily.sleepMinutes)}</div>
+              <ProgressBar percent={daily.sleepMinutes !== null ? Math.min(100, Math.round((daily.sleepMinutes / user.sleepGoalMin) * 100)) : 0} className="mt-3" />
+              <div className="mt-1 text-xs text-muted">Obiettivo {fmtSleep(user.sleepGoalMin)}</div>
+            </div>
+          </Card>
+        </Link>
 
         <ModeLink href="/diet" mode="diet" className="md:col-span-6">
           <Card className="flex items-center gap-4 transition-colors hover:bg-surface2">

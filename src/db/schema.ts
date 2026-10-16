@@ -68,6 +68,9 @@ export const profiles = pgTable("profiles", {
   weeklyTarget: integer("weekly_target").notNull().default(3),
   /** Partecipa alla classifica locale (opt-in: di default nessuno vede i tuoi numeri). */
   leaderboardOptIn: boolean("leaderboard_opt_in").notNull().default(false),
+  /** Obiettivi giornalieri di passi e sonno (minuti) */
+  stepsGoal: integer("steps_goal").notNull().default(8000),
+  sleepGoalMin: integer("sleep_goal_min").notNull().default(480),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
@@ -382,3 +385,98 @@ export const dietGoals = pgTable("diet_goals", {
   waterMl: integer("water_ml").notNull().default(2000),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
+
+// ───────── Notifiche (V4.5) ─────────
+
+/** Un dispositivo che ha accettato le notifiche. L'endpoint è del servizio push del browser (FCM, Mozilla, Apple...). */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    failures: integer("failures").notNull().default(0),
+    createdAt: createdAt(),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("push_endpoint_uq").on(t.endpoint), index("push_user_idx").on(t.userId)],
+).enableRLS();
+
+export const notificationSettings = pgTable("notification_settings", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  /** Interruttore generale: false = nessuna notifica, qualunque promemoria sia attivo */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Ore di silenzio ("HH:MM"), anche a cavallo della mezzanotte */
+  quietStart: text("quiet_start"),
+  quietEnd: text("quiet_end"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}).enableRLS();
+
+/** Promemoria personalizzabili: messaggi, orari e giorni li sceglie l'utente. */
+export const reminders = pgTable(
+  "reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["water", "motivation"] }).notNull(),
+    label: text("label").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    /** Uno viene scelto a caso a ogni invio. Segnaposto: {nome}, {bevuti}, {mancano}, {obiettivo}, {settimana}... */
+    messages: jsonb("messages").$type<string[]>().notNull(),
+    /** Orari "HH:MM" nel fuso dell'utente */
+    times: jsonb("times").$type<string[]>().notNull(),
+    /** Giorni attivi: maschera di bit, lunedì = 1 ... domenica = 64 */
+    days: integer("days").notNull().default(127),
+    /** Acqua: non disturbare se l'obiettivo di oggi è già raggiunto */
+    skipIfGoalMet: boolean("skip_if_goal_met").notNull().default(true),
+    /** Ultimo orario già inviato ("YYYY-MM-DD HH:MM"): evita invii doppi */
+    lastSlot: text("last_slot"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("reminders_user_idx").on(t.userId)],
+).enableRLS();
+
+// ───────── Corsa (V4.5) ─────────
+
+export const runs = pgTable(
+  "runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["in_progress", "completed"] }).notNull().default("in_progress"),
+    kind: text("kind", { enum: ["outdoor", "treadmill"] }).notNull().default("outdoor"),
+    /** Come è stata registrata: oggi a mano o con il cronometro; "gps" è predisposto per il futuro */
+    source: text("source", { enum: ["manual", "timer", "gps"] }).notNull().default("timer"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    /** Tempo in movimento accumulato (secondi). Se `timerStartedAt` è valorizzato il cronometro sta correndo. */
+    elapsedS: integer("elapsed_s").notNull().default(0),
+    timerStartedAt: timestamp("timer_started_at", { withTimezone: true }),
+    distanceM: integer("distance_m").notNull().default(0),
+    /** Sforzo percepito 1-10 */
+    effort: integer("effort"),
+    notes: text("notes"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("runs_user_started_idx").on(t.userId, t.startedAt), index("runs_user_status_idx").on(t.userId, t.status)],
+).enableRLS();
+
+// ───────── Passi e sonno inseriti a mano (V4.5) ─────────
+
+export const dailyLogs = pgTable(
+  "daily_logs",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    loggedOn: date("logged_on").notNull(),
+    steps: integer("steps"),
+    sleepMinutes: integer("sleep_minutes"),
+    /** Qualità del sonno percepita 1-5 */
+    sleepQuality: integer("sleep_quality"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.loggedOn] })],
+).enableRLS();

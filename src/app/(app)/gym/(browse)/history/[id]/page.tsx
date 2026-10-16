@@ -5,6 +5,9 @@ import { DeleteWorkoutButton } from "@/components/delete-workout-button";
 import { PrList, WorkoutExercises, WorkoutHeading, WorkoutStats } from "@/components/workout-detail";
 import { Icon } from "@/components/ui/icons";
 import { requireUser } from "@/modules/auth/session";
+import { dayKey } from "@/lib/dates";
+import { listWeights } from "@/modules/body/service";
+import { weightOn, workoutCalories } from "@/modules/stats/domain/calories";
 import { loadHistory } from "@/modules/stats/repository";
 import { buildWorkoutDetail, getWorkoutNotes } from "@/modules/stats/service";
 import { z } from "zod";
@@ -18,9 +21,11 @@ export default async function WorkoutDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) notFound();
   const user = await requireUser();
-  const [history, notes, postId] = await Promise.all([loadHistory(user.id), getWorkoutNotes(user.id, id), getPostIdForWorkout(user.id, id)]);
+  const [history, notes, postId, weights] = await Promise.all([loadHistory(user.id), getWorkoutNotes(user.id, id), getPostIdForWorkout(user.id, id), listWeights(user.id)]);
   const detail = buildWorkoutDetail(history, id, notes);
   if (!detail) notFound();
+  const weightKg = weightOn(weights, dayKey(new Date(detail.startedAt), user.timezone));
+  const kcal = workoutCalories({ weightKg, durationMin: detail.durationMin, sets: detail.setCount });
 
   return (
     <div className="space-y-5">
@@ -31,7 +36,7 @@ export default async function WorkoutDetailPage({ params }: { params: Promise<{ 
       <LinkButton href={postId ? `/feed/${postId}` : `/feed/new?workout=${id}`} variant="secondary" icon={postId ? "users" : "share"} className="w-full md:w-auto">
         {postId ? "Vedi il post nel feed" : "Condividi nel feed"}
       </LinkButton>
-      <WorkoutStats w={detail} />
+      <WorkoutStats w={detail} kcal={kcal} weightMissing={weightKg === null} />
       <PrList prs={detail.prs} />
       <WorkoutExercises w={detail} />
       <DeleteWorkoutButton id={detail.id} />

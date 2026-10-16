@@ -33,3 +33,14 @@ export function timeAgo(d: Date, now = new Date()): string {
 
 /** "45 kg × 8" */
 export const fmtSet = (kg: number, reps: number) => `${nf2.format(kg)} kg × ${reps}`;
+
+/** 450 -> "7 h 30" */
+export function fmtSleep(minutes: number | null): string {
+  if (minutes === null) return "—";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;
+}
+
+/** Distanza in km con due decimali: 5000 -> "5,00 km" */
+export const fmtKm = (meters: number) => `${new Intl.NumberFormat("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(meters / 1000)} km`;

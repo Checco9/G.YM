@@ -22,6 +22,8 @@ export type SessionUser = {
   timezone: string;
   weeklyTarget: number;
   leaderboardOptIn: boolean;
+  stepsGoal: number;
+  sleepGoalMin: number;
 };
 
 export async function createSession(userId: string) {
@@ -61,6 +63,8 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
       timezone: profiles.timezone,
       weeklyTarget: profiles.weeklyTarget,
       leaderboardOptIn: profiles.leaderboardOptIn,
+      stepsGoal: profiles.stepsGoal,
+      sleepGoalMin: profiles.sleepGoalMin,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))

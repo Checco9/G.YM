@@ -41,11 +41,14 @@ export function DietDay({
   const [editing, setEditing] = useState<EntryView | null>(null);
   const [waterSheet, setWaterSheet] = useState(false);
   const [notice, setNotice] = useState<Record<string, string>>({});
+  const [activity, setActivity] = useState<{ total: number; sessions: number } | null>(null);
 
   // Gli alimenti si scaricano in background: quando apri il selettore sono già pronti.
   useEffect(() => {
     void loadFoods().catch(() => {});
-  }, []);
+    // Calorie bruciate in allenamento: arrivano dopo, senza far aspettare la pagina
+    call<{ total: number; sessions: number }>("GET", `/api/activity/day?date=${date}`).then(setActivity).catch(() => {});
+  }, [date]);
 
   const total = useMemo(() => addUp(entries), [entries]);
   const progress = dayProgress(total, goals);
@@ -105,6 +108,11 @@ export function DietDay({
                   </div>
                 ))}
               </div>
+              {activity && activity.total > 0 && (
+                <p className="mt-5 border-t border-line pt-3 text-sm text-muted">
+                  Attività del giorno: circa <span className="font-semibold text-fg">{fmtNum(activity.total, 0)} kcal</span> bruciate (stima)
+                </p>
+              )}
             </>
           ) : (
             <>

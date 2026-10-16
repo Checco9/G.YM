@@ -153,6 +153,7 @@ export function BarChart({
   valueUnit = "",
   target,
   caption = "sett. del",
+  decimals = 0,
 }: {
   data: BarPoint[];
   height?: number;
@@ -161,8 +162,9 @@ export function BarChart({
   target?: number;
   /** Testo prima dell'etichetta selezionata */
   caption?: string;
+  decimals?: 0 | 1;
 }) {
-  const formatValue = (n: number) => `${fmtNum(Math.round(n), 0)}${valueUnit}`;
+  const formatValue = (n: number) => `${decimals ? fmtNum(n, 1) : fmtNum(Math.round(n), 0)}${valueUnit}`;
   const [ref, width] = useWidth();
   const [sel, setSel] = useState<number | null>(null);
   const pad = { l: 6, r: 6, t: 8, b: 24 };

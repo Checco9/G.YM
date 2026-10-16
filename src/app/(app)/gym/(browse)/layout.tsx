@@ -7,6 +7,7 @@ export default function BrowseLayout({ children }: { children: React.ReactNode }
       <LinkTabs
         tabs={[
           { href: "/gym", label: "Schede", exact: true },
+          { href: "/gym/runs", label: "Corsa" },
           { href: "/gym/history", label: "Storico" },
           { href: "/gym/calendar", label: "Calendario" },
         ]}

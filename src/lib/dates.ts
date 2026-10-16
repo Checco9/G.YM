@@ -48,3 +48,28 @@ export function daysBetweenKeys(a: string, b: string): number {
 export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
+
+/** Differenza (ms) tra l'ora locale del fuso e UTC in un dato istante. */
+function tzOffsetMs(at: Date, tz: string): number {
+  const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const p = Object.fromEntries(f.formatToParts(at).map((x) => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/** Converte una data "YYYY-MM-DD" e un'ora "HH:MM" nel fuso dell'utente nell'istante UTC corrispondente. */
+export function zonedToUtc(dateKey: string, time: string, tz: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  let t = guess - tzOffsetMs(new Date(guess), tz);
+  t = guess - tzOffsetMs(new Date(t), tz); // secondo passaggio: ora legale
+  return new Date(t);
+}
+
+/** Minuti dall'inizio della giornata, giorno ("YYYY-MM-DD") e giorno della settimana (0 = lunedì) nel fuso indicato. */
+export function localClock(date: Date, tz: string) {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hourCycle: "h23", hour: "2-digit", minute: "2-digit" });
+  const p = Object.fromEntries(f.formatToParts(date).map((x) => [x.type, x.value]));
+  const key = dayKey(date, tz);
+  return { day: key, minutes: Number(p.hour) * 60 + Number(p.minute), weekday: weekdayOfKey(key) };
+}

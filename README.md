@@ -1,6 +1,6 @@
 # G.YM
 
-Web app mobile-first per registrare gli allenamenti in palestra e seguire i progressi: schede, workout con autosave, storico, calendario, PR, livelli di forza, mappa del corpo fronte/retro, peso corporeo, obiettivi e statistiche. **V2**: XP e livello dell'account, 39 badge, sfide a tempo, obiettivi avanzati e classifica locale facoltativa. **V3**: feed con post (foto e descrizione collegati a un allenamento), commenti e reazioni, classifica con più categorie. **V4**: modalità Dieta con diario alimentare, acqua, obiettivi di calorie e macronutrienti, catalogo di 194 alimenti e alimenti personali. Stack: Next.js 15 (App Router), TypeScript, Tailwind 4, Postgres, Drizzle.
+Web app mobile-first per registrare gli allenamenti in palestra e seguire i progressi: schede, workout con autosave, storico, calendario, PR, livelli di forza, mappa del corpo fronte/retro, peso corporeo, obiettivi e statistiche. **V2**: XP e livello dell'account, 39 badge, sfide a tempo, obiettivi avanzati e classifica locale facoltativa. **V3**: feed con post (foto e descrizione collegati a un allenamento), commenti e reazioni, classifica con più categorie. **V4.5**: promemoria e notifiche personalizzabili (acqua e motivazione), calorie stimate degli allenamenti, sezione Corsa e inserimento manuale di passi e sonno. **V4**: modalità Dieta con diario alimentare, acqua, obiettivi di calorie e macronutrienti, catalogo di 194 alimenti e alimenti personali. Stack: Next.js 15 (App Router), TypeScript, Tailwind 4, Postgres, Drizzle.
 
 Architettura e regole di calcolo: vedi [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -37,6 +37,16 @@ Nota sulla privacy: il bucket è pubblico e i file hanno un nome casuale impossi
 Basta rifare il deploy: le migrazioni mancanti (RLS, sfide, community, dieta) e il seed si applicano da soli e **non toccano i dati esistenti** (workout, serie, schede, obiettivi, esercizi personali). Ripetere il deploy è sicuro. Per prudenza, prima del primo aggiornamento puoi fare una copia del database: `pg_dump "<connessione diretta di Supabase>" > backup.sql`.
 Se la migrazione desse problemi col pooler, imposta su Vercel `MIGRATION_DATABASE_URL` con la connessione diretta o "Session pooler".
 
+## Notifiche e promemoria
+Ogni utente sceglie da **Profilo, Notifiche**: se riceverle su ogni dispositivo, interruttore generale, ore di silenzio e i singoli promemoria (messaggi, orari, giorni). I messaggi sono liberi e possono usare segnaposto come `{nome}`, `{bevuti}`, `{mancano}`, `{settimana}`. Per l'acqua c'è anche l'opzione "salta se l'obiettivo di oggi è già raggiunto".
+
+Per attivarle sul tuo sito servono tre passaggi, una volta sola:
+1. **Chiavi**: in locale lancia `npm run vapid` e copia le variabili stampate (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`) su Vercel. La chiave privata e `CRON_SECRET` sono segrete. Rifai il deploy.
+2. **Invio programmato**: un'app non può svegliarsi da sola, quindi serve uno scheduler che la chiami ogni pochi minuti. Il file `.github/workflows/notifications.yml` lo fa con GitHub Actions (gratis): nel repository aggiungi i secrets `APP_URL` (indirizzo del sito, senza `/` finale) e `CRON_SECRET` (lo stesso valore di Vercel). Se carichi i file dal browser, la cartella `.github` può essere saltata: crea il file con "Add file, Create new file" scrivendo il percorso `.github/workflows/notifications.yml`. In alternativa va bene qualsiasi servizio che faccia una richiesta `POST` a `/api/cron/notifications` ogni 5 minuti con l'header `Authorization: Bearer <CRON_SECRET>` (per esempio cron-job.org).
+3. **Su ogni telefono**: apri Profilo, Notifiche e attiva il dispositivo. **Su iPhone e iPad** le notifiche funzionano solo se l'app è stata aggiunta alla schermata Home (Safari, Condividi, Aggiungi alla schermata Home) e aperta da lì; serve iOS 16.4 o successivo.
+
+Puntualità: GitHub Actions può ritardare di qualche minuto l'esecuzione. L'app tollera fino a 25 minuti di ritardo rispetto all'orario scelto, poi salta l'invio. Con il pulsante "Invia una notifica di prova" verifichi subito che tutto funzioni.
+
 ## Installarla sul telefono
 Apri il sito dal browser del telefono e scegli "Aggiungi a schermata Home": si comporta come un'app.
 
@@ -48,4 +58,6 @@ Apri il sito dal browser del telefono e scegli "Aggiungi a schermata Home": si c
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | no | foto dei post (vedi sopra) |
 | `SUPABASE_BUCKET` | no | nome del bucket (default `post-photos`) |
 | `MIGRATION_DATABASE_URL` | no | connessione alternativa solo per migrazioni e seed |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | no | notifiche push (`npm run vapid`) |
+| `CRON_SECRET` | no | segreto per l'invio programmato dei promemoria |
 | `APP_ORIGIN` | no | origine pubblica (es. `https://tuo-sito.vercel.app`) per il controllo CSRF; se vuota si usa l'header Host |

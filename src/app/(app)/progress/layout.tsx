@@ -10,6 +10,7 @@ export default function ProgressLayout({ children }: { children: React.ReactNode
           { href: "/progress/body", label: "Corpo" },
           { href: "/progress/exercises", label: "Esercizi" },
           { href: "/progress/weight", label: "Peso" },
+          { href: "/progress/daily", label: "Sonno e passi" },
           { href: "/progress/goals", label: "Obiettivi" },
           { href: "/progress/achievements", label: "Traguardi" },
           { href: "/progress/leaderboard", label: "Classifica" },

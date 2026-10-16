@@ -6,8 +6,9 @@ import { Stat } from "@/components/ui/card";
 import { requireUser } from "@/modules/auth/session";
 import { loadHistory } from "@/modules/stats/repository";
 import { buildCalendar } from "@/modules/stats/service";
-import { addDaysToKey } from "@/lib/dates";
-import { fmtNum, fmtVolume } from "@/lib/format";
+import { addDaysToKey, dayKey } from "@/lib/dates";
+import { listCompletedRuns, type RunView } from "@/modules/runs/service";
+import { fmtKm, fmtNum, fmtVolume } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Calendario" };
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ const WEEKDAYS = ["L", "M", "M", "G", "V", "S", "D"];
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ m?: string; d?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
-  const history = await loadHistory(user.id);
+  const [history, allRuns] = await Promise.all([loadHistory(user.id), listCompletedRuns(user.id, 500)]);
   const today = new Date();
   const m = /^(\d{4})-(\d{2})$/.exec(sp.m ?? "");
   const year = m ? Number(m[1]) : Number(new Intl.DateTimeFormat("en-CA", { timeZone: user.timezone, year: "numeric" }).format(today));
@@ -27,7 +28,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const prevKey = addDaysToKey(`${year}-${String(month).padStart(2, "0")}-01`, -1).slice(0, 7);
   const nextKey = addDaysToKey(`${year}-${String(month).padStart(2, "0")}-01`, 32).slice(0, 7);
   const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
-  const selected = sp.d && cal.byDay[sp.d] ? sp.d : null;
+  const mk = `${year}-${String(month).padStart(2, "0")}`;
+  const runsByDay: Record<string, RunView[]> = {};
+  for (const r of allRuns) {
+    const k = dayKey(new Date(r.startedAt), user.timezone);
+    if (k.startsWith(mk)) (runsByDay[k] ??= []).push(r);
+  }
+  const monthRuns = Object.values(runsByDay).flat();
+  const selected = sp.d && (cal.byDay[sp.d] || runsByDay[sp.d]) ? sp.d : null;
 
   const cells: (number | null)[] = [...Array(cal.firstWeekday).fill(null), ...Array.from({ length: cal.days }, (_, i) => i + 1)];
 
@@ -55,7 +63,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
             {cells.map((day, i) => {
               if (day === null) return <div key={i} />;
               const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const trained = cal.byDay[key]?.length ?? 0;
+              const trained = (cal.byDay[key]?.length ?? 0) + (runsByDay[key]?.length ?? 0);
               const isToday = key === cal.todayKey;
               const isSel = key === selected;
               const inner = (
@@ -68,7 +76,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                 </span>
               );
               return trained ? (
-                <Link key={i} href={`/gym/calendar?m=${year}-${String(month).padStart(2, "0")}&d=${key}`} aria-label={`${day}: ${trained} allenamento`}>
+                <Link key={i} href={`/gym/calendar?m=${year}-${String(month).padStart(2, "0")}&d=${key}`} aria-label={`${day}: ${trained} ${trained === 1 ? "attività" : "attività"}`}>
                   {inner}
                 </Link>
               ) : (
@@ -80,7 +88,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
         {selected && (
           <div className="mt-4 space-y-2">
-            {cal.byDay[selected].map((w) => (
+            {(runsByDay[selected] ?? []).map((r) => (
+              <Link key={r.id} href={`/gym/runs/${r.id}`}>
+                <Card className="flex items-center justify-between p-4">
+                  <div>
+                    <div className="num text-2xl font-semibold">Corsa, {fmtKm(r.distanceM)}</div>
+                    <div className="text-sm text-muted">{r.kind === "treadmill" ? "Tapis roulant" : "All'aperto"}</div>
+                  </div>
+                  <Icon name="right" className="text-muted" />
+                </Card>
+              </Link>
+            ))}
+            {(cal.byDay[selected] ?? []).map((w) => (
               <Link key={w.id} href={`/gym/history/${w.id}`}>
                 <Card className="flex items-center justify-between p-4">
                   <div>
@@ -98,6 +117,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <aside className="grid grid-cols-2 gap-3 md:grid-cols-1">
         <Card><Stat label="Questo mese" value={cal.monthCount} unit="allenamenti" /></Card>
         <Card><Stat label="Totale" value={cal.totalCount} unit="allenamenti" /></Card>
+        <Card><Stat label="Corse questo mese" value={monthRuns.length} note={`${fmtNum(monthRuns.reduce((n, r) => n + r.distanceM, 0) / 1000, 1)} km`} /></Card>
         <Card>
           <Stat label="Media" value={fmtNum(cal.avgPerWeek)} unit="a settimana" note="Ultime 8 settimane" />
         </Card>

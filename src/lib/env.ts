@@ -8,6 +8,13 @@ const schema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   SUPABASE_BUCKET: z.string().optional(),
+  // Notifiche push (chiavi VAPID: `npm run vapid`) e segreto per l'invio programmato
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
+  CRON_SECRET: z.string().min(16).optional(),
+  /** Host push aggiuntivi consentiti, separati da virgola (solo test) */
+  PUSH_ALLOWED_HOSTS: z.string().optional(),
   /** "local": salva in .uploads (solo per sviluppo e test) */
   PHOTO_STORAGE: z.string().optional(),
   NODE_ENV: z.string().optional(),

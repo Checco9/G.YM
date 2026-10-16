@@ -13,6 +13,7 @@ export function middleware(req: NextRequest) {
     `img-src 'self' data: blob: ${photoHost}`.trim(),
     "font-src 'self' data:",
     "connect-src 'self'",
+    "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
