@@ -1,0 +1,21 @@
+# Invio programmato dei promemoria: ogni 5 minuti chiama l'app, che controlla quali promemoria sono in scadenza.
+# Servono due "secrets" nel repository (Settings, Secrets and variables, Actions):
+#   APP_URL      indirizzo del sito, senza barra finale (es. https://tuo-sito.vercel.app)
+#   CRON_SECRET  lo stesso valore impostato su Vercel
+name: Promemoria
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  controlla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Controlla i promemoria in scadenza
+        run: |
+          curl --fail --silent --show-error --max-time 60 -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/notifications"
