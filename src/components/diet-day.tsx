@@ -10,7 +10,7 @@ import { MEALS, addUp, dayProgress, rescale, type Goals, type Meal } from "@/mod
 import type { EntryView, RecentFood } from "@/modules/diet/service";
 import { CalorieRing } from "./calorie-ring";
 import { FoodSheet } from "./food-sheet";
-import { Button } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 import { Card } from "./ui/card";
 import { FormError } from "./ui/field";
 import { ProgressBar } from "./ui/progress";
@@ -37,7 +37,7 @@ export function DietDay({
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [water, setWater] = useState(initialWater);
-  const [adding, setAdding] = useState<Meal | null>(null);
+  const [adding, setAdding] = useState<{ meal: Meal; scan: boolean } | null>(null);
   const [editing, setEditing] = useState<EntryView | null>(null);
   const [waterSheet, setWaterSheet] = useState(false);
   const [notice, setNotice] = useState<Record<string, string>>({});
@@ -180,9 +180,10 @@ export function DietDay({
                 </ul>
               )}
               <div className="mt-3 flex gap-2">
-                <Button variant="secondary" size="sm" icon="plus" className="flex-1" onClick={() => setAdding(m.key)}>
+                <Button variant="secondary" size="sm" icon="plus" className="flex-1" onClick={() => setAdding({ meal: m.key, scan: false })}>
                   Aggiungi alimento
                 </Button>
+                <IconButton icon="camera" label={`Scansiona un prodotto per ${m.label.toLowerCase()}`} className="bg-surface2" onClick={() => setAdding({ meal: m.key, scan: true })} />
                 {items.length === 0 && (
                   <Button variant="ghost" size="sm" onClick={() => copyMeal(m.key)}>
                     Copia da ieri
@@ -195,7 +196,7 @@ export function DietDay({
         })}
       </div>
 
-      {adding && <FoodSheet meal={adding} date={date} recents={recents} onClose={() => setAdding(null)} onAdded={(e) => setEntries((l) => [...l, e])} />}
+      {adding && <FoodSheet key={`${adding.meal}-${adding.scan}`} meal={adding.meal} startScan={adding.scan} date={date} recents={recents} onClose={() => setAdding(null)} onAdded={(e) => setEntries((l) => [...l, e])} />}
       {editing && (
         <EditEntry
           entry={editing}

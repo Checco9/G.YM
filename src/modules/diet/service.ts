@@ -5,6 +5,7 @@ import { addDaysToKey, dayKey } from "@/lib/dates";
 import { badRequest, notFound } from "@/lib/errors";
 import { dietGoals, foodEntries, foods, waterLogs } from "@/db/schema";
 import type { SessionUser } from "@/modules/auth/session";
+import { canonicalBarcode } from "./barcode/domain";
 import { rescale, scale, type Goals, type Meal } from "./domain/nutrition";
 import { copySchema, dateSchema, entrySchema, entryUpdateSchema, foodSchema, goalsSchema, waterSchema } from "./schemas";
 
@@ -22,6 +23,7 @@ export type FoodItem = {
   fat: number;
   servingSize: number | null;
   servingLabel: string | null;
+  barcode: string | null;
   isCustom: boolean;
 };
 
@@ -37,13 +39,14 @@ const foodColumns = {
   fat: foods.fat,
   servingSize: foods.servingSize,
   servingLabel: foods.servingLabel,
+  barcode: foods.barcode,
 };
 
 /** Il catalogo di sistema cambia solo con il seed: in cache per un'ora. */
 const systemFoods = unstable_cache(
   async (): Promise<FoodItem[]> =>
     (await db().select(foodColumns).from(foods).where(and(isNull(foods.ownerId), isNull(foods.archivedAt))).orderBy(asc(foods.name))).map((f) => ({ ...f, isCustom: false })),
-  ["system-foods"],
+  ["system-foods-v2"],
   { revalidate: 3600, tags: ["catalog"] },
 );
 
@@ -61,13 +64,38 @@ export async function listOwnFoods(userId: string): Promise<FoodItem[]> {
 
 export async function createFood(userId: string, input: unknown): Promise<FoodItem> {
   const d = foodSchema.parse(input);
+  const barcode = d.barcode ? canonicalBarcode(d.barcode) : null;
+  if (d.barcode && !barcode) throw badRequest("Codice a barre non valido");
   const [{ n }] = await db().select({ n: sql<number>`count(*)::int` }).from(foods).where(and(eq(foods.ownerId, userId), isNull(foods.archivedAt)));
   if (n >= 500) throw badRequest("Hai raggiunto il numero massimo di alimenti personali");
-  const [row] = await db()
-    .insert(foods)
-    .values({ ownerId: userId, name: d.name, brand: d.brand || null, unit: d.unit, kcal: d.kcal, protein: d.protein, carbs: d.carbs, fat: d.fat, servingSize: d.servingSize ?? null, servingLabel: d.servingSize ? d.servingLabel || null : null, category: "Personali" })
-    .returning(foodColumns);
-  return { ...row, isCustom: true };
+
+  return db().transaction(async (tx) => {
+    if (barcode) {
+      // Stesso prodotto, stesso utente: un solo alimento anche con due richieste ravvicinate (blocco per codice, valido solo
+      // dentro la transazione).
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${userId}:${barcode}`}, 0))`);
+      const [existing] = await tx.select(foodColumns).from(foods).where(and(eq(foods.ownerId, userId), eq(foods.barcode, barcode), isNull(foods.archivedAt))).limit(1);
+      if (existing) return { ...existing, isCustom: true };
+    }
+    const [row] = await tx
+      .insert(foods)
+      .values({
+        ownerId: userId,
+        name: d.name,
+        brand: d.brand || null,
+        unit: d.unit,
+        kcal: d.kcal,
+        protein: d.protein,
+        carbs: d.carbs,
+        fat: d.fat,
+        servingSize: d.servingSize ?? null,
+        servingLabel: d.servingSize ? d.servingLabel || null : null,
+        barcode,
+        category: d.fromOpenFoodFacts ? "Open Food Facts" : "Personali",
+      })
+      .returning(foodColumns);
+    return { ...row, isCustom: true };
+  });
 }
 
 export async function updateFood(userId: string, id: string, input: unknown): Promise<FoodItem> {

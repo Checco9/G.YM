@@ -4,15 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 import { call, ApiError } from "@/lib/client-api";
 import { addFoodLocal, loadFoods, normalize } from "@/lib/food-library";
 import { fmtNum } from "@/lib/format";
+import { describeIssues, type ProductIssue, type ScannedProduct } from "@/modules/diet/barcode/domain";
 import { MEALS, scale, type Meal } from "@/modules/diet/domain/nutrition";
+import type { LookupResult } from "@/modules/diet/barcode/service";
 import type { EntryView, FoodItem, RecentFood } from "@/modules/diet/service";
+import { BarcodeScanner } from "./barcode-scanner";
+import { FoodForm, type FoodPrefill, type MissingKey } from "./food-form";
 import { Button, IconButton } from "./ui/button";
 import { Field, FormError, TextInput } from "./ui/field";
 import { Icon } from "./ui/icons";
 import { Sheet } from "./ui/sheet";
-import { FoodForm } from "./food-form";
 
-type Step = { kind: "list" } | { kind: "quantity"; food: FoodItem } | { kind: "create" } | { kind: "quick" };
+/** Origine di un alimento arrivato da una scansione: serve a salvarlo (o meno) alla conferma. */
+type Scanned = { barcode: string; fromOff: boolean; persisted: boolean; kcalEstimated: boolean };
+
+type Step =
+  | { kind: "list" }
+  | { kind: "quantity"; food: FoodItem; scanned?: Scanned }
+  | { kind: "create"; prefill?: FoodPrefill; barcode?: string; fromOff?: boolean; notice?: string; missing?: MissingKey[] }
+  | { kind: "quick" }
+  | { kind: "scan" }
+  | { kind: "lookup"; code: string }
+  | { kind: "notfound"; code: string; reason: "missing" | "error"; message?: string };
 
 const num = (s: string) => {
   const n = parseFloat(s.replace(",", "."));
@@ -34,25 +47,57 @@ function foodFromRecent(r: RecentFood): FoodItem {
     fat: Math.round(r.fat * k * 10) / 10,
     servingSize: null,
     servingLabel: null,
+    barcode: null,
     isCustom: false,
   };
+}
+
+/** Prodotto completo di Open Food Facts -> alimento pronto da usare (non ancora salvato). */
+function foodFromProduct(p: ScannedProduct): FoodItem {
+  return {
+    id: `scan:${p.barcode}`,
+    name: p.name!,
+    brand: p.brand,
+    category: "Open Food Facts",
+    unit: p.unit,
+    kcal: p.kcal!,
+    protein: p.protein!,
+    carbs: p.carbs!,
+    fat: p.fat!,
+    servingSize: p.servingSize,
+    servingLabel: p.servingLabel,
+    barcode: p.barcode,
+    isCustom: true,
+  };
+}
+
+const ISSUE_KEY: Partial<Record<ProductIssue, MissingKey>> = { no_name: "name", no_kcal: "kcal", no_protein: "protein", no_carbs: "carbs", no_fat: "fat" };
+
+function reviewNotice(p: ScannedProduct): string {
+  const parts: string[] = [];
+  const missing = describeIssues(p.issues);
+  if (missing) parts.push(`Nel database mancano ${missing}.`);
+  if (p.issues.includes("inconsistent")) parts.push("Alcuni valori non sembrano coerenti tra loro.");
+  return `${parts.join(" ")} Controlla e completa i dati con l'etichetta del prodotto.`;
 }
 
 export function FoodSheet({
   meal,
   date,
   recents,
+  startScan = false,
   onAdded,
   onClose,
 }: {
   meal: Meal;
   date: string;
   recents: RecentFood[];
+  startScan?: boolean;
   onAdded: (e: EntryView) => void;
   onClose: () => void;
 }) {
   const mealLabel = MEALS.find((m) => m.key === meal)!.label;
-  const [step, setStep] = useState<Step>({ kind: "list" });
+  const [step, setStep] = useState<Step>(startScan ? { kind: "scan" } : { kind: "list" });
   const [foods, setFoods] = useState<FoodItem[] | null>(null);
   const [q, setQ] = useState("");
   const [added, setAdded] = useState<string[]>([]);
@@ -63,6 +108,42 @@ export function FoodSheet({
     loadFoods().then(setFoods).catch(() => setError("Impossibile caricare gli alimenti. Controlla la connessione."));
   }, []);
 
+  // Ricerca del prodotto dopo la scansione: prima i tuoi alimenti, poi Open Food Facts.
+  useEffect(() => {
+    if (step.kind !== "lookup") return;
+    let cancelled = false;
+    const code = step.code;
+    call<LookupResult>("GET", `/api/barcode/${code}`)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.source === "own") {
+          setStep({ kind: "quantity", food: r.food, scanned: { barcode: code, fromOff: r.food.category === "Open Food Facts", persisted: true, kcalEstimated: false } });
+          return;
+        }
+        const p = r.product;
+        if (p.complete) {
+          setStep({ kind: "quantity", food: foodFromProduct(p), scanned: { barcode: p.barcode, fromOff: true, persisted: false, kcalEstimated: p.issues.includes("kcal_estimated") } });
+        } else {
+          setStep({
+            kind: "create",
+            prefill: p,
+            barcode: p.barcode,
+            fromOff: true,
+            notice: reviewNotice(p),
+            missing: p.issues.map((i) => ISSUE_KEY[i]).filter((k): k is MissingKey => Boolean(k)),
+          });
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        const notFound = e instanceof ApiError && e.status === 404;
+        setStep({ kind: "notfound", code, reason: notFound ? "missing" : "error", message: notFound ? undefined : e instanceof ApiError ? e.message : "Servizio dei prodotti non raggiungibile." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
   const results = useMemo(() => {
     if (!foods) return [];
     const tokens = normalize(q).split(/\s+/).filter(Boolean);
@@ -70,21 +151,57 @@ export function FoodSheet({
     return list.slice(0, 50);
   }, [foods, q]);
 
+  const finishAdd = (entry: EntryView, label: string) => {
+    onAdded(entry);
+    setAdded((a) => [...a, label]);
+    setStep({ kind: "list" });
+    setQ("");
+  };
+
   async function add(body: Record<string, unknown>, label: string) {
     setBusy(true);
     setError(null);
     try {
-      const entry = await call<EntryView>("POST", "/api/diet/entries", { date, meal, ...body });
-      onAdded(entry);
-      setAdded((a) => [...a, label]);
-      setStep({ kind: "list" });
-      setQ("");
+      finishAdd(await call<EntryView>("POST", "/api/diet/entries", { date, meal, ...body }), label);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Errore");
+      setError(e instanceof ApiError ? e.message : "Si è verificato un errore. Riprova.");
     } finally {
       setBusy(false);
     }
   }
+
+  /** Prodotto scansionato non ancora salvato: lo si salva tra i tuoi alimenti (con il codice) e poi lo si aggiunge al diario. */
+  async function addScanned(food: FoodItem, scanned: Scanned, quantity: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await call<FoodItem>("POST", "/api/foods", {
+        name: food.name,
+        brand: food.brand,
+        unit: food.unit,
+        kcal: food.kcal,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        servingSize: food.servingSize,
+        servingLabel: food.servingLabel,
+        barcode: scanned.barcode,
+        fromOpenFoodFacts: scanned.fromOff,
+      });
+      addFoodLocal(saved);
+      setFoods((l) => (l ? [saved, ...l.filter((x) => x.id !== saved.id)] : l));
+      finishAdd(await call<EntryView>("POST", "/api/diet/entries", { date, meal, foodId: saved.id, quantity }), saved.name);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Si è verificato un errore. Riprova.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const backToList = () => {
+    setError(null);
+    setStep({ kind: "list" });
+  };
 
   const done = (
     <Button className="w-full" onClick={onClose}>
@@ -92,25 +209,113 @@ export function FoodSheet({
     </Button>
   );
 
+  // ───────── Scansione ─────────
+  if (step.kind === "scan")
+    return (
+      <Sheet
+        title="Scansiona prodotto"
+        onClose={onClose}
+        footer={
+          <Button variant="secondary" className="w-full" onClick={backToList}>
+            Cerca per nome
+          </Button>
+        }
+      >
+        <BarcodeScanner onDetected={(code) => setStep({ kind: "lookup", code })} />
+      </Sheet>
+    );
+
+  if (step.kind === "lookup")
+    return (
+      <Sheet
+        title="Cerco il prodotto"
+        onClose={onClose}
+        footer={
+          <Button variant="secondary" className="w-full" onClick={() => setStep({ kind: "scan" })}>
+            Annulla
+          </Button>
+        }
+      >
+        <div role="status" className="flex flex-col items-center gap-4 py-10 text-center">
+          <span className="plate-spin text-fg">
+            <Icon name="search" size={36} />
+          </span>
+          <div>
+            <div className="num text-2xl font-semibold">Ricerca in corso</div>
+            <div className="mt-1 text-sm text-muted">Codice {step.code}</div>
+          </div>
+        </div>
+      </Sheet>
+    );
+
+  if (step.kind === "notfound") {
+    const failed = step.reason === "error";
+    return (
+      <Sheet title={failed ? "Servizio non raggiungibile" : "Prodotto non trovato"} onClose={onClose}>
+        <p className="text-muted">
+          {failed ? step.message : "Questo codice non è nel database dei prodotti."} <span className="num text-fg">{step.code}</span>
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          {failed && (
+            <Button icon="search" onClick={() => setStep({ kind: "lookup", code: step.code })}>
+              Riprova
+            </Button>
+          )}
+          <Button variant={failed ? "secondary" : "primary"} icon="plus" onClick={() => setStep({ kind: "create", barcode: step.code, notice: "Inserisci i valori riportati sull'etichetta: la prossima volta che scansionerai questo prodotto lo troverai subito." })}>
+            Inserisci i valori a mano
+          </Button>
+          <Button variant="secondary" icon="search" onClick={backToList}>
+            Cerca per nome
+          </Button>
+          <Button variant="ghost" icon="camera" onClick={() => setStep({ kind: "scan" })}>
+            Scansiona di nuovo
+          </Button>
+        </div>
+      </Sheet>
+    );
+  }
+
+  // ───────── Creazione / controllo dati ─────────
   if (step.kind === "create")
     return (
-      <Sheet title="Nuovo alimento" onClose={onClose}>
+      <Sheet title={step.prefill ? "Controlla i dati" : "Nuovo alimento"} onClose={onClose}>
         <FoodForm
-          onCancel={() => setStep({ kind: "list" })}
+          prefill={step.prefill}
+          barcode={step.barcode}
+          fromOff={step.fromOff}
+          notice={step.notice}
+          missing={step.missing}
+          onCancel={backToList}
           onSaved={(f) => {
             addFoodLocal(f);
-            setFoods((l) => (l ? [f, ...l] : l));
-            setStep({ kind: "quantity", food: f });
+            setFoods((l) => (l ? [f, ...l.filter((x) => x.id !== f.id)] : l));
+            setStep({ kind: "quantity", food: f, scanned: step.barcode ? { barcode: step.barcode, fromOff: Boolean(step.fromOff), persisted: true, kcalEstimated: false } : undefined });
           }}
         />
       </Sheet>
     );
 
-  if (step.kind === "quick") return <QuickAdd mealLabel={mealLabel} busy={busy} error={error} onBack={() => setStep({ kind: "list" })} onClose={onClose} onAdd={(m) => add({ manual: m, quantity: 1 }, m.name)} />;
+  if (step.kind === "quick")
+    return <QuickAdd mealLabel={mealLabel} busy={busy} error={error} onBack={backToList} onClose={onClose} onAdd={(m) => add({ manual: m, quantity: 1 }, m.name)} />;
 
-  if (step.kind === "quantity")
-    return <Quantity food={step.food} mealLabel={mealLabel} busy={busy} error={error} onBack={() => setStep({ kind: "list" })} onClose={onClose} onAdd={(qty) => add({ foodId: step.food.id, quantity: qty }, step.food.name)} />;
+  if (step.kind === "quantity") {
+    const s = step.scanned;
+    return (
+      <Quantity
+        food={step.food}
+        mealLabel={mealLabel}
+        busy={busy}
+        error={error}
+        source={s?.fromOff ? "Dati da Open Food Facts (licenza ODbL)" : undefined}
+        note={s?.kcalEstimated ? "Calorie calcolate dai macronutrienti: nel database mancava il valore." : undefined}
+        onBack={backToList}
+        onClose={onClose}
+        onAdd={(qty) => (s && !s.persisted ? addScanned(step.food, s, qty) : add({ foodId: step.food.id, quantity: qty }, step.food.name))}
+      />
+    );
+  }
 
+  // ───────── Elenco ─────────
   return (
     <Sheet title={`Aggiungi a ${mealLabel.toLowerCase()}`} onClose={onClose} footer={done}>
       {added.length > 0 && (
@@ -119,7 +324,10 @@ export function FoodSheet({
           Aggiunto: {added[added.length - 1]}
         </p>
       )}
-      <TextInput placeholder="Cerca un alimento" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca un alimento" autoFocus />
+      <Button className="mb-3 w-full" icon="camera" onClick={() => setStep({ kind: "scan" })}>
+        Scansiona prodotto
+      </Button>
+      <TextInput placeholder="Cerca un alimento" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca un alimento" autoFocus={!startScan} />
       <div className="mt-3 flex gap-2">
         <Button variant="secondary" size="sm" icon="plus" className="flex-1" onClick={() => setStep({ kind: "create" })}>
           Crea alimento
@@ -170,11 +378,7 @@ export function FoodSheet({
             </li>
           ))}
         </ul>
-        {foods && results.length === 0 && (
-          <p className="py-6 text-center text-muted">
-            Nessun risultato per “{q}”. Puoi creare l'alimento o usare l'aggiunta veloce.
-          </p>
-        )}
+        {foods && results.length === 0 && <p className="py-6 text-center text-muted">Nessun risultato per “{q}”. Puoi creare l'alimento, scansionarne il codice o usare l'aggiunta veloce.</p>}
         {foods && !q && foods.length > 50 && <p className="py-3 text-center text-sm text-muted">Scrivi il nome per cercare tra tutti gli alimenti.</p>}
       </section>
     </Sheet>
@@ -186,6 +390,8 @@ function Quantity({
   mealLabel,
   busy,
   error,
+  source,
+  note,
   onBack,
   onClose,
   onAdd,
@@ -194,6 +400,8 @@ function Quantity({
   mealLabel: string;
   busy: boolean;
   error: string | null;
+  source?: string;
+  note?: string;
   onBack: () => void;
   onClose: () => void;
   onAdd: (quantity: number) => void;
@@ -220,7 +428,7 @@ function Quantity({
             Indietro
           </Button>
           <Button className="flex-1" disabled={busy || qty <= 0} onClick={() => onAdd(Math.round(qty * 10) / 10)}>
-            Aggiungi a {mealLabel.toLowerCase()}
+            {busy ? "Salvataggio…" : `Aggiungi a ${mealLabel.toLowerCase()}`}
           </Button>
         </div>
       }
@@ -288,7 +496,12 @@ function Quantity({
             </div>
           ))}
         </dl>
+        <p className="mt-3 border-t border-line pt-2 text-xs text-muted">
+          Per 100 {food.unit}: {fmtNum(food.kcal, 0)} kcal, proteine {fmtNum(food.protein)} g, carboidrati {fmtNum(food.carbs)} g, grassi {fmtNum(food.fat)} g
+        </p>
       </div>
+      {note && <p className="mt-3 text-sm text-muted">{note}</p>}
+      {source && <p className="mt-1 text-xs text-muted">{source}</p>}
       <div className="mt-3">
         <FormError message={error} />
       </div>

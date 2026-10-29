@@ -52,6 +52,12 @@ export function FoodManager({ initial }: { initial: FoodItem[] }) {
                 <div className="mt-0.5 text-sm text-muted">
                   {fmtNum(f.kcal, 0)} kcal, P {fmtNum(f.protein)} C {fmtNum(f.carbs)} G {fmtNum(f.fat)} per 100 {f.unit}
                 </div>
+                {f.barcode && (
+                  <div className="text-xs text-muted">
+                    Codice {f.barcode}
+                    {f.category === "Open Food Facts" ? ", fonte Open Food Facts" : ""}
+                  </div>
+                )}
               </div>
               <IconButton icon="edit" label={`Modifica ${f.name}`} onClick={() => setEditing(f)} />
               <IconButton icon="trash" label={`Elimina ${f.name}`} onClick={() => setConfirm(f)} />

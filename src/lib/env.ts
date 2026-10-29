@@ -13,6 +13,11 @@ const schema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
   CRON_SECRET: z.string().min(16).optional(),
+  // Open Food Facts (scanner dei codici a barre): nessuna chiave richiesta
+  OFF_BASE_URL: z.string().url().optional(),
+  /** Contatto indicato nello User-Agent, come richiesto dal servizio (es. la tua email) */
+  OFF_CONTACT: z.string().max(100).optional(),
+  OFF_TIMEOUT_MS: z.string().optional(),
   /** Host push aggiuntivi consentiti, separati da virgola (solo test) */
   PUSH_ALLOWED_HOSTS: z.string().optional(),
   /** "local": salva in .uploads (solo per sviluppo e test) */

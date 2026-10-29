@@ -15,6 +15,10 @@ export const foodSchema = z
     fat: n(0, 100, "Grassi non validi"),
     servingSize: n(1, 2000).nullish(),
     servingLabel: z.string().trim().max(30).nullish(),
+    /** Codice a barre (EAN/UPC): viene controllato e portato in forma canonica dal servizio */
+    barcode: z.string().trim().max(20).nullish(),
+    /** I valori provengono da Open Food Facts: serve per indicarne la fonte */
+    fromOpenFoodFacts: z.boolean().optional(),
   })
   .refine((f) => f.protein + f.carbs + f.fat <= 101, { message: "Proteine, carboidrati e grassi superano i 100 g", path: ["protein"] });
 

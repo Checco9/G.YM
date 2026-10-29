@@ -147,6 +147,7 @@
   .fade-in { animation: fade-in 0.18s ease-out; }
   .bar-slide { animation: bar-slide 1.1s ease-in-out infinite; }
   .plate-spin { animation: plate-spin 1.6s linear infinite; }
+  .scan-line { animation: scan-line 1.8s ease-in-out infinite alternate; }
 
   /* Colori dei livelli (usati da componenti e mappa del corpo) */
   .lv-unranked { --lv: var(--lv-0); }
@@ -171,6 +172,10 @@
   100% { transform: translateX(260%); }
 }
 @keyframes plate-spin { to { transform: rotate(360deg); } }
+@keyframes scan-line {
+  from { top: 8%; }
+  to { top: 92%; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

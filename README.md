@@ -1,6 +1,6 @@
 # G.YM
 
-Web app mobile-first per registrare gli allenamenti in palestra e seguire i progressi: schede, workout con autosave, storico, calendario, PR, livelli di forza, mappa del corpo fronte/retro, peso corporeo, obiettivi e statistiche. **V2**: XP e livello dell'account, 39 badge, sfide a tempo, obiettivi avanzati e classifica locale facoltativa. **V3**: feed con post (foto e descrizione collegati a un allenamento), commenti e reazioni, classifica con più categorie. **V4.5**: promemoria e notifiche personalizzabili (acqua e motivazione), calorie stimate degli allenamenti, sezione Corsa e inserimento manuale di passi e sonno. **V4**: modalità Dieta con diario alimentare, acqua, obiettivi di calorie e macronutrienti, catalogo di 194 alimenti e alimenti personali. Stack: Next.js 15 (App Router), TypeScript, Tailwind 4, Postgres, Drizzle.
+Web app mobile-first per registrare gli allenamenti in palestra e seguire i progressi: schede, workout con autosave, storico, calendario, PR, livelli di forza, mappa del corpo fronte/retro, peso corporeo, obiettivi e statistiche. **V2**: XP e livello dell'account, 39 badge, sfide a tempo, obiettivi avanzati e classifica locale facoltativa. **V3**: feed con post (foto e descrizione collegati a un allenamento), commenti e reazioni, classifica con più categorie. **V4.6**: scanner dei codici a barre nella Dieta (ZXing + Open Food Facts). **V4.5**: promemoria e notifiche personalizzabili (acqua e motivazione), calorie stimate degli allenamenti, sezione Corsa e inserimento manuale di passi e sonno. **V4**: modalità Dieta con diario alimentare, acqua, obiettivi di calorie e macronutrienti, catalogo di 194 alimenti e alimenti personali. Stack: Next.js 15 (App Router), TypeScript, Tailwind 4, Postgres, Drizzle.
 
 Architettura e regole di calcolo: vedi [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -47,6 +47,15 @@ Per attivarle sul tuo sito servono tre passaggi, una volta sola:
 
 Puntualità: GitHub Actions può ritardare di qualche minuto l'esecuzione. L'app tollera fino a 25 minuti di ritardo rispetto all'orario scelto, poi salta l'invio. Con il pulsante "Invia una notifica di prova" verifichi subito che tutto funzioni.
 
+## Scanner dei codici a barre (Dieta)
+Nella Dieta, "Scansiona prodotto" (o l'icona della fotocamera accanto a ogni pasto) apre la fotocamera posteriore, legge il codice EAN/UPC e cerca il prodotto: prima tra i tuoi alimenti già salvati (istantaneo), poi su [Open Food Facts](https://world.openfoodfacts.org), il database collaborativo gratuito. Controlli le quantità (grammi o porzioni) vedendo i valori calcolati in tempo reale e aggiungi al diario. Il prodotto resta salvato tra i tuoi alimenti con il suo codice: la volta dopo si trova subito, anche senza rete verso Open Food Facts.
+- **Costo zero e nessuna chiave**: `@zxing/browser` e `@zxing/library` sono open source (MIT e Apache 2.0), Open Food Facts non richiede registrazione per la lettura. Non serve alcuna modifica al database.
+- **Imposta `OFF_CONTACT`** (la tua email) su Vercel: il servizio chiede di indicare un contatto nello User-Agent delle richieste.
+- **Dati incompleti**: se mancano nome, calorie o macronutrienti, o se i valori non tornano, l'app mostra il modulo già compilato con i campi mancanti evidenziati; le calorie mancanti si calcolano dai macronutrienti e viene segnalato. Se il prodotto non esiste puoi cercarlo per nome o inserire i valori a mano (il codice viene salvato per la prossima volta).
+- **Fotocamera su Android**: serve HTTPS (Vercel lo ha) e il permesso della fotocamera, richiesto al primo utilizzo. Se lo hai negato: nel browser tocca il lucchetto accanto all'indirizzo, Autorizzazioni, Fotocamera; per l'app installata, Impostazioni di Android, App, G.YM, Autorizzazioni. Se la fotocamera non è utilizzabile puoi digitare il codice a mano. Dove disponibile c'è anche il pulsante per accendere la luce.
+- **Attribuzione**: i dati di Open Food Facts sono sotto licenza ODbL; l'app ne indica la fonte e salva i prodotti importati con la categoria "Open Food Facts". I dati dei prodotti possono contenere errori: confronta con l'etichetta.
+- **Limiti del servizio**: le richieste partono tutte dal tuo server, quindi l'app usa una cache di un giorno per i prodotti trovati e si limita a 12 richieste al minuto verso Open Food Facts in totale (la documentazione ufficiale riporta limiti diversi nelle sue versioni; si è scelto il più prudente). Se il limite scatta, l'app lo spiega e puoi riprovare dopo un minuto.
+
 ## Installarla sul telefono
 Apri il sito dal browser del telefono e scegli "Aggiungi a schermata Home": si comporta come un'app.
 
@@ -60,4 +69,5 @@ Apri il sito dal browser del telefono e scegli "Aggiungi a schermata Home": si c
 | `MIGRATION_DATABASE_URL` | no | connessione alternativa solo per migrazioni e seed |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | no | notifiche push (`npm run vapid`) |
 | `CRON_SECRET` | no | segreto per l'invio programmato dei promemoria |
+| `OFF_CONTACT` | consigliata | email di contatto per Open Food Facts (scanner) |
 | `APP_ORIGIN` | no | origine pubblica (es. `https://tuo-sito.vercel.app`) per il controllo CSRF; se vuota si usa l'header Host |

@@ -14,6 +14,7 @@ export function middleware(req: NextRequest) {
     "font-src 'self' data:",
     "connect-src 'self'",
     "worker-src 'self'",
+    "media-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
